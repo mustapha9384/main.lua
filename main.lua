@@ -1,5 +1,5 @@
 -- ==========================================
--- main.lua - الكود الكامل الجاهز للرفع على GitHub
+-- main.lua - الكود الكامل المدمج والجاهز للرفع على GitHub
 -- ==========================================
 
 local SERVER_URL = "https://key-system-api-hjxy.onrender.com/verify-key"
@@ -9,6 +9,9 @@ local RbxAnalyticsService = game:GetService("RbxAnalyticsService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local CoreGui = game:GetService("CoreGui")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local VirtualUser = game:GetService("VirtualUser")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
@@ -21,6 +24,13 @@ local ESP_Player_Enabled = false
 local ESP_Chest_Enabled = false
 local Flying = false
 local FlySpeed = 50
+
+-- حالات الميزات الجديدة (Blox Fruits Features)
+_G.AutoChest = false
+_G.AutoBounty = false
+_G.AutoEliteHunter = false
+_G.AutoAwakening = false
+_G.AutoFruitSniper = false
 
 -- متغيرات الشخصية
 local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
@@ -76,7 +86,135 @@ local function VerifyKey(inputKey)
 end
 
 ---------------------------------------------------------
--- 3. محرك الطيران الحديث (LinearVelocity & AlignOrientation)
+-- 3. وظائف الميزات الجديدة (Blox Fruits Logic)
+---------------------------------------------------------
+
+-- 💰 Auto Chest Collector
+local function collectChests()
+    task.spawn(function()
+        while _G.AutoChest and ScriptActive do
+            for _, chest in pairs(workspace:GetChildren()) do
+                if not _G.AutoChest or not ScriptActive then break end
+
+                if chest:IsA("Model") and chest:FindFirstChild("Chest") then
+                    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                        LocalPlayer.Character.HumanoidRootPart.CFrame = chest.Chest.CFrame
+                        task.wait(0.2)
+
+                        for _, item in pairs(LocalPlayer.Backpack:GetChildren()) do
+                            if item:IsA("Tool") and (item.Name == "Fist of Darkness" or item.Name == "God's Chalice") then
+                                _G.AutoChest = false
+                                print("Rare item found! Stopping Auto Chest Collector.")
+                                return
+                            end
+                        end
+                    end
+                end
+            end
+            task.wait(2)
+        end
+    end)
+end
+
+-- ⚔️ Auto Bounty Farming
+local function huntPlayers()
+    task.spawn(function()
+        while _G.AutoBounty and ScriptActive do
+            for _, enemy in pairs(Players:GetPlayers()) do
+                if enemy ~= LocalPlayer and enemy.Character and enemy.Character:FindFirstChild("HumanoidRootPart") then
+                    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                        LocalPlayer.Character.HumanoidRootPart.CFrame = enemy.Character.HumanoidRootPart.CFrame
+                        task.wait(1)
+                    end
+                end
+            end
+            task.wait(5)
+        end
+    end)
+end
+
+-- 🏹 Auto Elite Hunter
+local function huntEliteBosses()
+    task.spawn(function()
+        while _G.AutoEliteHunter and ScriptActive do
+            for _, boss in pairs(workspace:GetChildren()) do
+                if boss:IsA("Model") and boss:FindFirstChild("HumanoidRootPart") and boss.Name:match("Diablo|Deandre|Urban") then
+                    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                        LocalPlayer.Character.HumanoidRootPart.CFrame = boss.HumanoidRootPart.CFrame
+                        task.wait(0.2)
+
+                        repeat
+                            if boss:FindFirstChild("Humanoid") and boss.Humanoid.Health > 0 then
+                                VirtualUser:CaptureController()
+                                VirtualUser:ClickButton1(Vector2.new())
+                            end
+                            task.wait(0.5)
+                        until not boss:FindFirstChild("Humanoid") or boss.Humanoid.Health <= 0 or not _G.AutoEliteHunter or not ScriptActive
+
+                        print("Elite Boss Defeated!")
+                    end
+                end
+            end
+            task.wait(5)
+        end
+    end)
+end
+
+-- 🌟 Auto Awakening
+local function awakenAllMoves()
+    task.spawn(function()
+        while _G.AutoAwakening and ScriptActive do
+            local pGui = LocalPlayer:FindFirstChild("PlayerGui")
+            if pGui and pGui:FindFirstChild("Awakening") and pGui.Awakening:FindFirstChild("Frame") then
+                local awakenFrame = pGui.Awakening.Frame
+                if awakenFrame.Visible then
+                    for _, button in pairs(awakenFrame:GetChildren()) do
+                        if button:IsA("TextButton") and button.Text == "Awaken" then
+                            button:Activate()
+                        end
+                    end
+                end
+            end
+            task.wait(1)
+        end
+    end)
+end
+
+-- 🍏 Auto Fruit Sniper
+local rareFruits = {"Dragon", "Dough", "Leopard", "Venom", "Control", "Shadow"}
+local function buyRareFruit()
+    task.spawn(function()
+        while _G.AutoFruitSniper and ScriptActive do
+            local commF = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("CommF_")
+            if commF then
+                local shop = commF:InvokeServer("GetFruits")
+                if type(shop) == "table" then
+                    for _, fruit in pairs(shop) do
+                        if table.find(rareFruits, fruit.Name) then
+                            commF:InvokeServer("BuyFruit", fruit.Name)
+                            print("Bought rare fruit: " .. fruit.Name)
+                            _G.AutoFruitSniper = false
+                            return
+                        end
+                    end
+                end
+            end
+            task.wait(5)
+        end
+    end)
+end
+
+-- 🛑 Anti-AFK
+LocalPlayer.Idled:Connect(function()
+    if ScriptActive then
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.W, false, game)
+        task.wait(1)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.W, false, game)
+    end
+end)
+
+---------------------------------------------------------
+-- 4. محرك الطيران الحديث (LinearVelocity & AlignOrientation)
 ---------------------------------------------------------
 local function CleanupFlyPhysics()
     if flyRenderConnection then
@@ -167,7 +305,7 @@ LocalPlayer.CharacterAdded:Connect(function(newChar)
 end)
 
 ---------------------------------------------------------
--- 4. كاشف اللاعبين والصناديق (ESP)
+-- 5. كاشف اللاعبين والصناديق (ESP)
 ---------------------------------------------------------
 local function CreatePlayerESP(plr)
     if plr == LocalPlayer then return end
@@ -249,7 +387,7 @@ end)
 workspace.DescendantAdded:Connect(ApplyChestESP)
 
 ---------------------------------------------------------
--- 5. المنيو الرئيسي وإدارة الواجهة (Orion Hub)
+-- 6. المنيو الرئيسي وإدارة الواجهة (Orion Hub)
 ---------------------------------------------------------
 local function LoadOrionHub()
     local OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/jensonhirst/Orion/main/source')))()
@@ -285,6 +423,85 @@ local function LoadOrionHub()
         OrionLib:ToggleUi()
     end)
 
+    -- تبويب الميزات التلقائية (Main / Auto Features)
+    local MainTab = Window:MakeTab({ Name = "Main Features", Icon = "rbxassetid://4483345998" })
+
+    MainTab:AddToggle({
+        Name = "Auto Chest Collector",
+        Default = false,
+        Callback = function(Value)
+            _G.AutoChest = Value
+            if Value then collectChests() end
+        end
+    })
+
+    MainTab:AddToggle({
+        Name = "Auto Bounty",
+        Default = false,
+        Callback = function(Value)
+            _G.AutoBounty = Value
+            if Value then huntPlayers() end
+        end
+    })
+
+    MainTab:AddToggle({
+        Name = "Auto Elite Hunter",
+        Default = false,
+        Callback = function(Value)
+            _G.AutoEliteHunter = Value
+            if Value then huntEliteBosses() end
+        end
+    })
+
+    MainTab:AddToggle({
+        Name = "Auto Awakening",
+        Default = false,
+        Callback = function(Value)
+            _G.AutoAwakening = Value
+            if Value then awakenAllMoves() end
+        end
+    })
+
+    MainTab:AddToggle({
+        Name = "Auto Fruit Sniper",
+        Default = false,
+        Callback = function(Value)
+            _G.AutoFruitSniper = Value
+            if Value then buyRareFruit() end
+        end
+    })
+
+    -- تبويب التنقل (Teleport)
+    local TeleportTab = Window:MakeTab({ Name = "Teleport", Icon = "rbxassetid://4483345998" })
+
+    TeleportTab:AddButton({
+        Name = "Teleport to First Sea",
+        Callback = function()
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(2000, 50, 2000)
+            end
+        end
+    })
+
+    TeleportTab:AddButton({
+        Name = "Teleport to Second Sea",
+        Callback = function()
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(8000, 50, -8000)
+            end
+        end
+    })
+
+    TeleportTab:AddButton({
+        Name = "Teleport to Third Sea",
+        Callback = function()
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(12000, 50, -12000)
+            end
+        end
+    })
+
+    -- تبويب الرؤية (ESP Visuals)
     local VisualsTab = Window:MakeTab({ Name = "ESP Visuals", Icon = "rbxassetid://4483345998" })
 
     VisualsTab:AddToggle({
@@ -316,6 +533,7 @@ local function LoadOrionHub()
         end
     })
 
+    -- تبويب الحركة (Movement)
     local MovementTab = Window:MakeTab({ Name = "Movement", Icon = "rbxassetid://4483345998" })
 
     MovementTab:AddToggle({
@@ -339,6 +557,7 @@ local function LoadOrionHub()
         end
     })
 
+    -- تبويب الإعدادات (Settings)
     local SettingsTab = Window:MakeTab({ Name = "Settings", Icon = "rbxassetid://4483345998" })
 
     SettingsTab:AddButton({
@@ -347,6 +566,11 @@ local function LoadOrionHub()
             ScriptActive = false
             ESP_Player_Enabled = false
             ESP_Chest_Enabled = false
+            _G.AutoChest = false
+            _G.AutoBounty = false
+            _G.AutoEliteHunter = false
+            _G.AutoAwakening = false
+            _G.AutoFruitSniper = false
             ToggleFly(false)
 
             for _, plr in pairs(Players:GetPlayers()) do
@@ -369,7 +593,7 @@ local function LoadOrionHub()
 end
 
 ---------------------------------------------------------
--- 6. واجهة التفعيل (Key UI)
+-- 7. واجهة التفعيل (Key UI)
 ---------------------------------------------------------
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "KeySystemUI_Container"
