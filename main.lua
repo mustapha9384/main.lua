@@ -2,13 +2,16 @@
 -- السكربت الرئيسي داخل Roblox
 -- ==========================================
 
--- استبدل هذا الرابط برابط سيرفرك على Render
-local SERVER_URL = "https://your-app-name.onrender.com/verify-key"
+-- رابط سيرفرك الفعلي على Render
+local SERVER_URL = "https://key-system-api-hjxy.onrender.com/verify-key"
 
 local HttpService = game:GetService("HttpService")
 local RbxAnalyticsService = game:GetService("RbxAnalyticsService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
+
+-- التوافق مع مختلف مشغلات روبلوكس (Executors)
+local http_request = (syn and syn.request) or (http and http.request) or http_request or request
 
 -- دالة جلب بصمة الجهاز الفريدة (HWID)
 local function GetHWID()
@@ -27,6 +30,10 @@ local function VerifyKey(inputKey)
         return false, "الرجاء إدخال المفتاح!"
     end
 
+    if not http_request then
+        return false, "المشغل الخاص بك لا يدعم طلبات HTTP!"
+    end
+
     local userHWID = GetHWID()
     
     local payload = HttpService:JSONEncode({
@@ -35,7 +42,7 @@ local function VerifyKey(inputKey)
     })
 
     local success, response = pcall(function()
-        return request({
+        return http_request({
             Url = SERVER_URL,
             Method = "POST",
             Headers = { 
@@ -46,8 +53,13 @@ local function VerifyKey(inputKey)
     end)
 
     if success and response and response.Body then
-        local result = HttpService:JSONDecode(response.Body)
-        return result.success, result.message
+        local decodeSuccess, result = pcall(function()
+            return HttpService:JSONDecode(response.Body)
+        end)
+
+        if decodeSuccess and result then
+            return result.success, result.message
+        end
     end
 
     return false, "فشل الاتصال بالسيرفر!"
@@ -109,20 +121,22 @@ VerifyBtn.MouseButton1Click:Connect(function()
     StatusText.Text = "Checking..."
     StatusText.TextColor3 = Color3.fromRGB(255, 255, 0)
     
-    local isOK, msg = VerifyKey(KeyInput.Text)
-    
-    if isOK then
-        StatusText.Text = "✅ " .. msg
-        StatusText.TextColor3 = Color3.fromRGB(0, 255, 0)
-        task.wait(1.5)
-        ScreenGui:Destroy()
+    task.spawn(function()
+        local isOK, msg = VerifyKey(KeyInput.Text)
         
-        ------------------------------------------
-        -- ضع كود السكربت الخاص بك هنا للتنفيذ --
-        print("Script Executed Successfully!")
-        ------------------------------------------
-    else
-        StatusText.Text = "❌ " .. msg
-        StatusText.TextColor3 = Color3.fromRGB(255, 50, 50)
-    end
+        if isOK then
+            StatusText.Text = "✅ " .. msg
+            StatusText.TextColor3 = Color3.fromRGB(0, 255, 0)
+            task.wait(1.5)
+            ScreenGui:Destroy()
+            
+            ------------------------------------------
+            -- ضع كود السكربت الخاص بك هنا للتنفيذ --
+            print("Script Executed Successfully!")
+            ------------------------------------------
+        else
+            StatusText.Text = "❌ " .. msg
+            StatusText.TextColor3 = Color3.fromRGB(255, 50, 50)
+        end
+    end)
 end)
