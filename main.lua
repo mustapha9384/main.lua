@@ -1,8 +1,7 @@
 -- ==========================================
--- السكربت الرئيسي داخل Roblox
+-- السكربت الرئيسي داخل Roblox (مصحح بالكامل)
 -- ==========================================
 
--- رابط سيرفرك الفعلي على Render
 local SERVER_URL = "https://key-system-api-hjxy.onrender.com/verify-key"
 
 local HttpService = game:GetService("HttpService")
@@ -10,8 +9,8 @@ local RbxAnalyticsService = game:GetService("RbxAnalyticsService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
--- التوافق مع مختلف مشغلات روبلوكس (Executors)
-local http_request = (syn and syn.request) or (http and http.request) or http_request or request
+-- التوافق الشامل مع كافة مشغلات الهواتف والحاسوب
+local http_request = (syn and syn.request) or (http and http.request) or http_request or request or (fluxus and fluxus.request) or (krnl and krnl.request)
 
 -- دالة جلب بصمة الجهاز الفريدة (HWID)
 local function GetHWID()
@@ -35,9 +34,10 @@ local function VerifyKey(inputKey)
     end
 
     local userHWID = GetHWID()
+    local cleanKey = string.gsub(inputKey, "^%s*(.-)%s*$", "%1")
     
     local payload = HttpService:JSONEncode({
-        key = string.gsub(inputKey, "^%s*(.-)%s*$", "%1"),
+        key = cleanKey,
         hwid = userHWID
     })
 
@@ -52,13 +52,18 @@ local function VerifyKey(inputKey)
         })
     end)
 
-    if success and response and response.Body then
-        local decodeSuccess, result = pcall(function()
-            return HttpService:JSONDecode(response.Body)
-        end)
+    if success and response then
+        -- قراءة الاستجابة سواء كانت بحروف صغيرة أم كبيرة
+        local responseBody = response.Body or response.body
+        
+        if responseBody then
+            local decodeSuccess, result = pcall(function()
+                return HttpService:JSONDecode(responseBody)
+            end)
 
-        if decodeSuccess and result then
-            return result.success, result.message
+            if decodeSuccess and result then
+                return result.success, (result.message or "تمت العملية")
+            end
         end
     end
 
