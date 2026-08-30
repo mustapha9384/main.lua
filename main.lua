@@ -1,188 +1,128 @@
+-- ==========================================
+-- السكربت الرئيسي داخل Roblox
+-- ==========================================
+
+-- استبدل هذا الرابط برابط سيرفرك على Render
+local SERVER_URL = "https://your-app-name.onrender.com/verify-key"
+
 local HttpService = game:GetService("HttpService")
+local RbxAnalyticsService = game:GetService("RbxAnalyticsService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
--- رابط ملف keys.json الصحيح في مستودعك
-local KEYS_URL = "https://raw.githubusercontent.com/mustapha9384/main.lua/main/keys.json"
-
--- ==========================================
--- 1. خوارزمية SHA-256 متوافقة تماماً مع Roblox (Luau)
--- ==========================================
-local function SHA256(str)
-    local k = {
-        0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
-        0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
-        0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
-        0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
-        0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
-        0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
-        0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-        0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
-    }
-
-    local function rrotate(value, bits)
-        return bit32.bor(bit32.rshift(value, bits), bit32.lshift(value, 32 - bits))
+-- دالة جلب بصمة الجهاز الفريدة (HWID)
+local function GetHWID()
+    local success, hwid = pcall(function()
+        return RbxAnalyticsService:GetClientId()
+    end)
+    if success and hwid then
+        return hwid
     end
-
-    local h1, h2, h3, h4, h5, h6, h7, h8 = 
-        0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
-        0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
-
-    local msg = str .. string.char(0x80)
-    local len = #str * 8
-    while (#msg % 64) ~= 56 do
-        msg = msg .. string.char(0x00)
-    end
-
-    for i = 7, 0, -1 do
-        msg = msg .. string.char(bit32.band(bit32.rshift(len, i * 8), 0xFF))
-    end
-
-    for chunkStart = 1, #msg, 64 do
-        local w = {}
-        for i = 1, 16 do
-            local base = chunkStart + (i - 1) * 4
-            local b1, b2, b3, b4 = string.byte(msg, base, base + 3)
-            w[i] = bit32.bor(bit32.lshift(b1, 24), bit32.lshift(b2, 16), bit32.lshift(b3, 8), b4)
-        end
-
-        for i = 17, 64 do
-            local s0 = bit32.bxor(rrotate(w[i - 15], 7), rrotate(w[i - 15], 18), bit32.rshift(w[i - 15], 3))
-            local s1 = bit32.bxor(rrotate(w[i - 2], 17), rrotate(w[i - 2], 19), bit32.rshift(w[i - 2], 10))
-            w[i] = bit32.band(w[i - 16] + s0 + w[i - 7] + s1, 0xFFFFFFFF)
-        end
-
-        local a, b, c, d, e, f, g, h = h1, h2, h3, h4, h5, h6, h7, h8
-        for i = 1, 64 do
-            local S1 = bit32.bxor(rrotate(e, 6), rrotate(e, 11), rrotate(e, 25))
-            local ch = bit32.bxor(bit32.band(e, f), bit32.band(bit32.bnot(e), g))
-            local temp1 = bit32.band(h + S1 + ch + k[i] + w[i], 0xFFFFFFFF)
-            local S0 = bit32.bxor(rrotate(a, 2), rrotate(a, 13), rrotate(a, 22))
-            local maj = bit32.bxor(bit32.band(a, b), bit32.band(a, c), bit32.band(b, c))
-            local temp2 = bit32.band(S0 + maj, 0xFFFFFFFF)
-
-            h = g
-            g = f
-            f = e
-            e = bit32.band(d + temp1, 0xFFFFFFFF)
-            d = c
-            c = b
-            b = a
-            a = bit32.band(temp1 + temp2, 0xFFFFFFFF)
-        end
-
-        h1 = bit32.band(h1 + a, 0xFFFFFFFF)
-        h2 = bit32.band(h2 + b, 0xFFFFFFFF)
-        h3 = bit32.band(h3 + c, 0xFFFFFFFF)
-        h4 = bit32.band(h4 + d, 0xFFFFFFFF)
-        h5 = bit32.band(h5 + e, 0xFFFFFFFF)
-        h6 = bit32.band(h6 + f, 0xFFFFFFFF)
-        h7 = bit32.band(h7 + g, 0xFFFFFFFF)
-        h8 = bit32.band(h8 + h, 0xFFFFFFFF)
-    end
-
-    return string.format("%08x%08x%08x%08x%08x%08x%08x%08x", h1, h2, h3, h4, h5, h6, h7, h8)
+    return tostring(LocalPlayer.UserId)
 end
 
--- ==========================================
--- 2. التحقق من المفتاح
--- ==========================================
-local function ValidateKey(inputKey)
-    local cleanedKey = string.gsub(inputKey, "^%s*(.-)%s*$", "%1") -- إزالة المسافات الزائدة
-    local hashedInput = SHA256(cleanedKey)
+-- دالة التحقق من المفتاح عبر السيرفر
+local function VerifyKey(inputKey)
+    if not inputKey or inputKey == "" then
+        return false, "الرجاء إدخال المفتاح!"
+    end
+
+    local userHWID = GetHWID()
+    
+    local payload = HttpService:JSONEncode({
+        key = string.gsub(inputKey, "^%s*(.-)%s*$", "%1"),
+        hwid = userHWID
+    })
 
     local success, response = pcall(function()
-        return game:HttpGet(KEYS_URL .. "?nocache=" .. os.time())
+        return request({
+            Url = SERVER_URL,
+            Method = "POST",
+            Headers = { 
+                ["Content-Type"] = "application/json" 
+            },
+            Body = payload
+        })
     end)
 
-    if not success then 
-        warn("Failed to fetch keys.json:", response)
-        return false 
+    if success and response and response.Body then
+        local result = HttpService:JSONDecode(response.Body)
+        return result.success, result.message
     end
 
-    local successDecode, keysData = pcall(function()
-        return HttpService:JSONDecode(response)
-    end)
-
-    if not successDecode or not keysData then return false end
-
-    for _, entry in ipairs(keysData) do
-        if string.lower(entry.hash) == string.lower(hashedInput) then
-            return true
-        end
-    end
-    return false
+    return false, "فشل الاتصال بالسيرفر!"
 end
 
 -- ==========================================
--- 3. الميزة (الطيران)
+-- واجهة المستخدم المباشرة (Simple GUI)
 -- ==========================================
-local function StartScript()
-    local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-    local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
-    
-    local BodyVelocity = Instance.new("BodyVelocity")
-    BodyVelocity.MaxForce = Vector3.new(400000, 400000, 400000)
-    BodyVelocity.Velocity = Vector3.new(0, 80, 0)
-    BodyVelocity.Parent = HumanoidRootPart
-    
-    task.wait(4)
-    BodyVelocity:Destroy()
-end
 
--- ==========================================
--- 4. واجهة إدخال المفتاح (GUI)
--- ==========================================
 local ScreenGui = Instance.new("ScreenGui")
-local Frame = Instance.new("Frame")
-local TextBox = Instance.new("TextBox")
-local SubmitBtn = Instance.new("TextButton")
-local StatusLabel = Instance.new("TextLabel")
+local MainFrame = Instance.new("Frame")
+local Title = Instance.new("TextLabel")
+local KeyInput = Instance.new("TextBox")
+local VerifyBtn = Instance.new("TextButton")
+local StatusText = Instance.new("TextLabel")
 
-ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = game:GetService("CoreGui") or LocalPlayer:WaitForChild("PlayerGui")
 
-Frame.Parent = ScreenGui
-Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-Frame.Position = UDim2.new(0.35, 0, 0.35, 0)
-Frame.Size = UDim2.new(0, 320, 0, 190)
-Frame.Active = true
-Frame.Draggable = true
+MainFrame.Name = "KeySystemUI"
+MainFrame.Parent = ScreenGui
+MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+MainFrame.Position = UDim2.new(0.5, -150, 0.5, -100)
+MainFrame.Size = UDim2.new(0, 300, 0, 200)
+MainFrame.Active = true
+MainFrame.Draggable = true
 
-TextBox.Parent = Frame
-TextBox.PlaceholderText = "Enter Key Here..."
-TextBox.Size = UDim2.new(0, 280, 0, 40)
-TextBox.Position = UDim2.new(0, 20, 0, 30)
-TextBox.Text = ""
-TextBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-TextBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+Title.Parent = MainFrame
+Title.Size = UDim2.new(1, 0, 0, 40)
+Title.Text = "Key System - Lock HWID"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 18
+Title.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
 
-SubmitBtn.Parent = Frame
-SubmitBtn.Text = "Verify Key"
-SubmitBtn.Size = UDim2.new(0, 280, 0, 40)
-SubmitBtn.Position = UDim2.new(0, 20, 0, 85)
-SubmitBtn.BackgroundColor3 = Color3.fromRGB(0, 140, 255)
-SubmitBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+KeyInput.Parent = MainFrame
+KeyInput.Position = UDim2.new(0.1, 0, 0.3, 0)
+KeyInput.Size = UDim2.new(0.8, 0, 0, 35)
+KeyInput.PlaceholderText = "Paste Key Here..."
+KeyInput.Text = ""
+KeyInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+KeyInput.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
 
-StatusLabel.Parent = Frame
-StatusLabel.Size = UDim2.new(0, 280, 0, 30)
-StatusLabel.Position = UDim2.new(0, 20, 0, 135)
-StatusLabel.Text = ""
-StatusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-StatusLabel.BackgroundTransparency = 1
+VerifyBtn.Parent = MainFrame
+VerifyBtn.Position = UDim2.new(0.1, 0, 0.55, 0)
+VerifyBtn.Size = UDim2.new(0.8, 0, 0, 35)
+VerifyBtn.Text = "Verify Key"
+VerifyBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
+VerifyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+VerifyBtn.TextSize = 16
 
-SubmitBtn.MouseButton1Click:Connect(function()
-    StatusLabel.Text = "Checking..."
-    StatusLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
+StatusText.Parent = MainFrame
+StatusText.Position = UDim2.new(0.1, 0, 0.8, 0)
+StatusText.Size = UDim2.new(0.8, 0, 0, 30)
+StatusText.Text = ""
+StatusText.TextColor3 = Color3.fromRGB(255, 255, 255)
+StatusText.TextSize = 14
+
+-- عند ضغط زر التحقق
+VerifyBtn.MouseButton1Click:Connect(function()
+    StatusText.Text = "Checking..."
+    StatusText.TextColor3 = Color3.fromRGB(255, 255, 0)
     
-    if ValidateKey(TextBox.Text) then
-        StatusLabel.Text = "✅ Correct Key!"
-        StatusLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
-        task.wait(1)
+    local isOK, msg = VerifyKey(KeyInput.Text)
+    
+    if isOK then
+        StatusText.Text = "✅ " .. msg
+        StatusText.TextColor3 = Color3.fromRGB(0, 255, 0)
+        task.wait(1.5)
         ScreenGui:Destroy()
-        StartScript()
+        
+        ------------------------------------------
+        -- ضع كود السكربت الخاص بك هنا للتنفيذ --
+        print("Script Executed Successfully!")
+        ------------------------------------------
     else
-        StatusLabel.Text = "❌ Invalid Key!"
-        StatusLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+        StatusText.Text = "❌ " .. msg
+        StatusText.TextColor3 = Color3.fromRGB(255, 50, 50)
     end
 end)
