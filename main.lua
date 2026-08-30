@@ -1,5 +1,5 @@
 -- ==========================================
--- السكربت الكامل: إصلاح نظام الطيران (BodyVelocity) + Orion Lib + Key System
+-- السكربت الكامل: إصلاح ResetOnSpawn + طيران مضمون 100% + Key System + Orion
 -- ==========================================
 
 local SERVER_URL = "https://key-system-api-hjxy.onrender.com/verify-key"
@@ -20,6 +20,22 @@ local ESP_Player_Enabled = false
 local ESP_Chest_Enabled = false
 local Flying = false
 local FlySpeed = 50
+
+-- متغيرات الشخصية الديناميكية
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
+local HRP = Character:WaitForChild("HumanoidRootPart")
+
+LocalPlayer.CharacterAdded:Connect(function(newChar)
+    Character = newChar
+    Humanoid = newChar:WaitForChild("Humanoid")
+    HRP = newChar:WaitForChild("HumanoidRootPart")
+    
+    if Flying then
+        task.wait(0.5)
+        ToggleFly(true)
+    end
+end)
 
 ---------------------------------------------------------
 -- دالة جلب البصمة (HWID)
@@ -93,6 +109,7 @@ local function CreatePlayerESP(plr)
         billboard.Size = UDim2.new(0, 100, 0, 30)
         billboard.StudsOffset = Vector3.new(0, 3, 0)
         billboard.AlwaysOnTop = true
+        billboard.ResetOnSpawn = false
         billboard.Enabled = ESP_Player_Enabled
 
         local txt = Instance.new("TextLabel", billboard)
@@ -184,71 +201,55 @@ task.spawn(function()
 end)
 
 ---------------------------------------------------------
--- 3. محرك الطيران المضمون (BodyVelocity & BodyGyro)
+-- 3. محرك الطيران العالمي والمستقر (Universal Mobile/PC Fly)
 ---------------------------------------------------------
-local flyBV, flyBG, flyConn
+local flyBV, flyBG, flyLoop
 
-local function ToggleFly(state)
+function ToggleFly(state)
     Flying = state
-    local char = LocalPlayer.Character
-    if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if not hrp or not hum then return end
+    
+    if flyLoop then flyLoop:Disconnect() flyLoop = nil end
+    if flyBV then flyBV:Destroy() flyBV = nil end
+    if flyBG then flyBG:Destroy() flyBG = nil end
+    
+    if Humanoid then Humanoid.PlatformStand = false end
 
     if Flying then
-        if flyBV then flyBV:Destroy() end
-        if flyBG then flyBG:Destroy() end
-        if flyConn then flyConn:Disconnect() end
+        if not HRP or not Humanoid then return end
 
         flyBV = Instance.new("BodyVelocity")
-        flyBV.Name = "FlyVelocity"
+        flyBV.Name = "FlyBV"
         flyBV.MaxForce = Vector3.new(1e9, 1e9, 1e9)
         flyBV.Velocity = Vector3.zero
-        flyBV.Parent = hrp
+        flyBV.Parent = HRP
 
         flyBG = Instance.new("BodyGyro")
-        flyBG.Name = "FlyGyro"
+        flyBG.Name = "FlyBG"
         flyBG.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
         flyBG.P = 9000
-        flyBG.CFrame = hrp.CFrame
-        flyBG.Parent = hrp
+        flyBG.CFrame = HRP.CFrame
+        flyBG.Parent = HRP
 
-        hum.PlatformStand = true
-
-        flyConn = RunService.RenderStepped:Connect(function()
-            if not Flying or not ScriptActive or not char or not char.Parent or not hrp or not hrp.Parent then
-                if flyConn then flyConn:Disconnect() flyConn = nil end
-                if flyBV then flyBV:Destroy() flyBV = nil end
-                if flyBG then flyBG:Destroy() flyBG = nil end
-                if hum then hum.PlatformStand = false end
+        flyLoop = RunService.RenderStepped:Connect(function()
+            if not Flying or not ScriptActive or not HRP or not HRP.Parent or not Humanoid or not Humanoid.Parent then
+                ToggleFly(false)
                 return
             end
 
-            hum.PlatformStand = true
-            local moveDir = hum.MoveVector
-            local camCF = Camera.CFrame
+            Humanoid.PlatformStand = true
+            local moveDir = Humanoid.MoveVector
 
             if moveDir.Magnitude > 0 then
-                local flyDir = (camCF.LookVector * -moveDir.Z) + (camCF.RightVector * moveDir.X)
+                local flyDir = (Camera.CFrame.LookVector * -moveDir.Z) + (Camera.CFrame.RightVector * moveDir.X)
                 flyBV.Velocity = flyDir.Unit * FlySpeed
             else
                 flyBV.Velocity = Vector3.zero
             end
-            
-            flyBG.CFrame = camCF
+
+            flyBG.CFrame = Camera.CFrame
         end)
-    else
-        if flyConn then flyConn:Disconnect() flyConn = nil end
-        if flyBV then flyBV:Destroy() flyBV = nil end
-        if flyBG then flyBG:Destroy() flyBG = nil end
-        if hum then hum.PlatformStand = false end
     end
 end
-
-LocalPlayer.CharacterAdded:Connect(function()
-    if Flying then ToggleFly(false) end
-end)
 
 ---------------------------------------------------------
 -- المنيو الرئيسي وإدارة الأزرار الدائرية
@@ -266,6 +267,7 @@ local function LoadOrionHub()
     -- زر التصغير الدائري (|||)
     local ToggleGui = Instance.new("ScreenGui")
     ToggleGui.Name = "ToggleCircleGui"
+    ToggleGui.ResetOnSpawn = false
     ToggleGui.Parent = CoreGui or LocalPlayer:WaitForChild("PlayerGui")
 
     local CircleBtn = Instance.new("TextButton", ToggleGui)
@@ -358,13 +360,16 @@ end
 -- واجهة إدخال المفتاح (Key Verification UI)
 ---------------------------------------------------------
 local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "KeySystemUI_Container"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = CoreGui or LocalPlayer:WaitForChild("PlayerGui")
+
 local MainFrame = Instance.new("Frame")
 local Title = Instance.new("TextLabel")
 local KeyInput = Instance.new("TextBox")
 local VerifyBtn = Instance.new("TextButton")
 local StatusText = Instance.new("TextLabel")
 
-ScreenGui.Parent = CoreGui or LocalPlayer:WaitForChild("PlayerGui")
 MainFrame.Name = "KeySystemUI"
 MainFrame.Parent = ScreenGui
 MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
