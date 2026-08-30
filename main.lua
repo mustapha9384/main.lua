@@ -1,5 +1,5 @@
 -- ==========================================
--- السكربت المحسّن: تفعيل الموزع + Orion Lib (مع إصلاح الطيران والـ ESP)
+-- السكربت الكامل: إصلاح نظام الطيران (BodyVelocity) + Orion Lib + Key System
 -- ==========================================
 
 local SERVER_URL = "https://key-system-api-hjxy.onrender.com/verify-key"
@@ -66,7 +66,7 @@ local function VerifyKey(inputKey)
 end
 
 ---------------------------------------------------------
--- 1. محرك كاشف اللاعبين (Player ESP - بعيد وقريب)
+-- 1. كاشف اللاعبين (Player ESP)
 ---------------------------------------------------------
 local function CreatePlayerESP(plr)
     if plr == LocalPlayer then return end
@@ -76,11 +76,9 @@ local function CreatePlayerESP(plr)
         local hrp = char:WaitForChild("HumanoidRootPart", 5)
         if not hrp then return end
 
-        -- إزالة القديم إن وجد
         if char:FindFirstChild("ESP_Player_HL") then char.ESP_Player_HL:Destroy() end
         if hrp:FindFirstChild("ESP_Player_Tag") then hrp.ESP_Player_Tag:Destroy() end
 
-        -- Highlight
         local hl = Instance.new("Highlight")
         hl.Name = "ESP_Player_HL"
         hl.FillColor = Color3.fromRGB(255, 0, 0)
@@ -89,7 +87,6 @@ local function CreatePlayerESP(plr)
         hl.Enabled = ESP_Player_Enabled
         hl.Parent = char
 
-        -- Text Tag (للرؤية من مسافات بعيدة جداً)
         local billboard = Instance.new("BillboardGui")
         billboard.Name = "ESP_Player_Tag"
         billboard.Adornee = hrp
@@ -118,7 +115,6 @@ for _, plr in ipairs(Players:GetPlayers()) do
 end
 Players.PlayerAdded:Connect(CreatePlayerESP)
 
--- تحديث حالة الـ ESP للاعبين
 task.spawn(function()
     while task.wait(0.5) do
         if not ScriptActive then break end
@@ -136,7 +132,7 @@ task.spawn(function()
 end)
 
 ---------------------------------------------------------
--- 2. محرك كاشف الصناديق (Chest ESP)
+-- 2. كاشف الصناديق (Chest ESP)
 ---------------------------------------------------------
 local function IsChest(obj)
     local name = string.lower(obj.Name)
@@ -165,7 +161,6 @@ local function ApplyChestESP(obj)
     end
 end
 
--- فحص الكائنات الموجودة والقادمة
 task.spawn(function()
     for _, obj in ipairs(workspace:GetDescendants()) do
         ApplyChestESP(obj)
@@ -176,7 +171,6 @@ task.spawn(function()
     end)
 end)
 
--- تحديث حالة الـ ESP للصناديق
 task.spawn(function()
     while task.wait(1) do
         if not ScriptActive then break end
@@ -190,44 +184,71 @@ task.spawn(function()
 end)
 
 ---------------------------------------------------------
--- 3. محرك الطيران الحديث (Fly Engine - يعمل لجميع الأجهزة)
+-- 3. محرك الطيران المضمون (BodyVelocity & BodyGyro)
 ---------------------------------------------------------
-RunService.RenderStepped:Connect(function()
-    if Flying and ScriptActive then
-        local char = LocalPlayer.Character
-        if char then
-            local hrp = char:FindFirstChild("HumanoidRootPart")
-            local hum = char:FindFirstChildOfClass("Humanoid")
-            if hrp and hum then
-                hum.PlatformStand = true
-                
-                local moveDir = hum.MoveVector
-                local camCF = Camera.CFrame
-                local velocity = Vector3.zero
-
-                if moveDir.Magnitude > 0 then
-                    local flyDir = (camCF.LookVector * -moveDir.Z) + (camCF.RightVector * moveDir.X)
-                    velocity = flyDir * FlySpeed
-                end
-
-                -- تحريك الشخصية مباشرة وسلس
-                hrp.AssemblyLinearVelocity = velocity
-                hrp.CFrame = CFrame.new(hrp.Position, hrp.Position + camCF.LookVector)
-            end
-        end
-    end
-end)
+local flyBV, flyBG, flyConn
 
 local function ToggleFly(state)
     Flying = state
     local char = LocalPlayer.Character
-    if char then
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        local hrp = char:FindFirstChild("HumanoidRootPart")
-        if hum then hum.PlatformStand = state end
-        if hrp and not state then hrp.AssemblyLinearVelocity = Vector3.zero end
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hrp or not hum then return end
+
+    if Flying then
+        if flyBV then flyBV:Destroy() end
+        if flyBG then flyBG:Destroy() end
+        if flyConn then flyConn:Disconnect() end
+
+        flyBV = Instance.new("BodyVelocity")
+        flyBV.Name = "FlyVelocity"
+        flyBV.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+        flyBV.Velocity = Vector3.zero
+        flyBV.Parent = hrp
+
+        flyBG = Instance.new("BodyGyro")
+        flyBG.Name = "FlyGyro"
+        flyBG.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
+        flyBG.P = 9000
+        flyBG.CFrame = hrp.CFrame
+        flyBG.Parent = hrp
+
+        hum.PlatformStand = true
+
+        flyConn = RunService.RenderStepped:Connect(function()
+            if not Flying or not ScriptActive or not char or not char.Parent or not hrp or not hrp.Parent then
+                if flyConn then flyConn:Disconnect() flyConn = nil end
+                if flyBV then flyBV:Destroy() flyBV = nil end
+                if flyBG then flyBG:Destroy() flyBG = nil end
+                if hum then hum.PlatformStand = false end
+                return
+            end
+
+            hum.PlatformStand = true
+            local moveDir = hum.MoveVector
+            local camCF = Camera.CFrame
+
+            if moveDir.Magnitude > 0 then
+                local flyDir = (camCF.LookVector * -moveDir.Z) + (camCF.RightVector * moveDir.X)
+                flyBV.Velocity = flyDir.Unit * FlySpeed
+            else
+                flyBV.Velocity = Vector3.zero
+            end
+            
+            flyBG.CFrame = camCF
+        end)
+    else
+        if flyConn then flyConn:Disconnect() flyConn = nil end
+        if flyBV then flyBV:Destroy() flyBV = nil end
+        if flyBG then flyBG:Destroy() flyBG = nil end
+        if hum then hum.PlatformStand = false end
     end
 end
+
+LocalPlayer.CharacterAdded:Connect(function()
+    if Flying then ToggleFly(false) end
+end)
 
 ---------------------------------------------------------
 -- المنيو الرئيسي وإدارة الأزرار الدائرية
@@ -242,7 +263,7 @@ local function LoadOrionHub()
         IntroText = "Loading Hub..."
     })
 
-    -- زر التصغير الدائري (الدائرة السوداء |||)
+    -- زر التصغير الدائري (|||)
     local ToggleGui = Instance.new("ScreenGui")
     ToggleGui.Name = "ToggleCircleGui"
     ToggleGui.Parent = CoreGui or LocalPlayer:WaitForChild("PlayerGui")
@@ -314,7 +335,6 @@ local function LoadOrionHub()
             ESP_Chest_Enabled = false
             ToggleFly(false)
             
-            -- حذف جميع الإضافات
             for _, plr in pairs(Players:GetPlayers()) do
                 if plr.Character then
                     if plr.Character:FindFirstChild("ESP_Player_HL") then plr.Character.ESP_Player_HL:Destroy() end
