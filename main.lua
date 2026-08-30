@@ -1,5 +1,5 @@
 -- ==========================================
--- السكربت الكامل: تفعيل الموزع + Orion Lib مع إصلاح الخصائص وزر التخفي والإنهاء
+-- السكربت المحسّن: تفعيل الموزع + Orion Lib (مع إصلاح الطيران والـ ESP)
 -- ==========================================
 
 local SERVER_URL = "https://key-system-api-hjxy.onrender.com/verify-key"
@@ -14,7 +14,7 @@ local Camera = workspace.CurrentCamera
 
 local http_request = (syn and syn.request) or (http and http.request) or http_request or request or (fluxus and fluxus.request) or (krnl and krnl.request)
 
--- حالات التشغيل العام
+-- حالات التشغيل العامة
 local ScriptActive = true
 local ESP_Player_Enabled = false
 local ESP_Chest_Enabled = false
@@ -66,110 +66,166 @@ local function VerifyKey(inputKey)
 end
 
 ---------------------------------------------------------
--- المحرك الفعلي للخصائص (ESP & Fly Engine)
+-- 1. محرك كاشف اللاعبين (Player ESP - بعيد وقريب)
 ---------------------------------------------------------
+local function CreatePlayerESP(plr)
+    if plr == LocalPlayer then return end
 
--- 1. كاشف اللاعبين (Player ESP)
+    local function ApplyESP(char)
+        if not char then return end
+        local hrp = char:WaitForChild("HumanoidRootPart", 5)
+        if not hrp then return end
+
+        -- إزالة القديم إن وجد
+        if char:FindFirstChild("ESP_Player_HL") then char.ESP_Player_HL:Destroy() end
+        if hrp:FindFirstChild("ESP_Player_Tag") then hrp.ESP_Player_Tag:Destroy() end
+
+        -- Highlight
+        local hl = Instance.new("Highlight")
+        hl.Name = "ESP_Player_HL"
+        hl.FillColor = Color3.fromRGB(255, 0, 0)
+        hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+        hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        hl.Enabled = ESP_Player_Enabled
+        hl.Parent = char
+
+        -- Text Tag (للرؤية من مسافات بعيدة جداً)
+        local billboard = Instance.new("BillboardGui")
+        billboard.Name = "ESP_Player_Tag"
+        billboard.Adornee = hrp
+        billboard.Size = UDim2.new(0, 100, 0, 30)
+        billboard.StudsOffset = Vector3.new(0, 3, 0)
+        billboard.AlwaysOnTop = true
+        billboard.Enabled = ESP_Player_Enabled
+
+        local txt = Instance.new("TextLabel", billboard)
+        txt.Size = UDim2.new(1, 0, 1, 0)
+        txt.BackgroundTransparency = 1
+        txt.Text = plr.Name
+        txt.TextColor3 = Color3.fromRGB(255, 50, 50)
+        txt.TextStrokeTransparency = 0
+        txt.TextSize = 14
+
+        billboard.Parent = hrp
+    end
+
+    if plr.Character then ApplyESP(plr.Character) end
+    plr.CharacterAdded:Connect(ApplyESP)
+end
+
+for _, plr in ipairs(Players:GetPlayers()) do
+    CreatePlayerESP(plr)
+end
+Players.PlayerAdded:Connect(CreatePlayerESP)
+
+-- تحديث حالة الـ ESP للاعبين
 task.spawn(function()
     while task.wait(0.5) do
         if not ScriptActive then break end
         for _, plr in ipairs(Players:GetPlayers()) do
             if plr ~= LocalPlayer and plr.Character then
                 local hl = plr.Character:FindFirstChild("ESP_Player_HL")
-                if ESP_Player_Enabled then
-                    if not hl then
-                        hl = Instance.new("Highlight")
-                        hl.Name = "ESP_Player_HL"
-                        hl.FillColor = Color3.fromRGB(255, 0, 0)
-                        hl.OutlineColor = Color3.fromRGB(255, 255, 255)
-                        hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                        hl.Parent = plr.Character
-                    end
-                elseif hl then
-                    hl:Destroy()
-                end
+                local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+                local tag = hrp and hrp:FindFirstChild("ESP_Player_Tag")
+                
+                if hl then hl.Enabled = ESP_Player_Enabled end
+                if tag then tag.Enabled = ESP_Player_Enabled end
             end
         end
     end
 end)
 
--- 2. كاشف الصناديق (Chest ESP)
+---------------------------------------------------------
+-- 2. محرك كاشف الصناديق (Chest ESP)
+---------------------------------------------------------
+local function IsChest(obj)
+    local name = string.lower(obj.Name)
+    if string.find(name, "chest") or string.find(name, "box") or string.find(name, "crate") 
+    or string.find(name, "treasure") or string.find(name, "loot") then
+        return true
+    end
+    if obj:FindFirstChildOfClass("ProximityPrompt") then
+        return true
+    end
+    return false
+end
+
+local function ApplyChestESP(obj)
+    if not (obj:IsA("Model") or obj:IsA("BasePart")) then return end
+    if not IsChest(obj) then return end
+
+    if not obj:FindFirstChild("ESP_Chest_HL") then
+        local hl = Instance.new("Highlight")
+        hl.Name = "ESP_Chest_HL"
+        hl.FillColor = Color3.fromRGB(255, 215, 0)
+        hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+        hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        hl.Enabled = ESP_Chest_Enabled
+        hl.Parent = obj
+    end
+end
+
+-- فحص الكائنات الموجودة والقادمة
 task.spawn(function()
-    while task.wait(1.5) do
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        ApplyChestESP(obj)
+    end
+    workspace.DescendantAdded:Connect(function(obj)
+        task.wait(0.1)
+        ApplyChestESP(obj)
+    end)
+end)
+
+-- تحديث حالة الـ ESP للصناديق
+task.spawn(function()
+    while task.wait(1) do
         if not ScriptActive then break end
-        if ESP_Chest_Enabled then
-            for _, obj in ipairs(workspace:GetDescendants()) do
-                if obj:IsA("Model") or obj:IsA("BasePart") then
-                    local name = string.lower(obj.Name)
-                    if (string.find(name, "chest") or string.find(name, "box")) and not string.find(name, "part") then
-                        local hl = obj:FindFirstChild("ESP_Chest_HL")
-                        if not hl then
-                            hl = Instance.new("Highlight")
-                            hl.Name = "ESP_Chest_HL"
-                            hl.FillColor = Color3.fromRGB(255, 215, 0)
-                            hl.OutlineColor = Color3.fromRGB(255, 255, 255)
-                            hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                            hl.Parent = obj
-                        end
-                    end
-                end
-            end
-        else
-            for _, obj in ipairs(workspace:GetDescendants()) do
-                local hl = obj:FindFirstChild("ESP_Chest_HL")
-                if hl then hl:Destroy() end
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            local hl = obj:FindFirstChild("ESP_Chest_HL")
+            if hl then
+                hl.Enabled = ESP_Chest_Enabled
             end
         end
     end
 end)
 
--- 3. محرك الطيران (Fly Engine)
+---------------------------------------------------------
+-- 3. محرك الطيران الحديث (Fly Engine - يعمل لجميع الأجهزة)
+---------------------------------------------------------
+RunService.RenderStepped:Connect(function()
+    if Flying and ScriptActive then
+        local char = LocalPlayer.Character
+        if char then
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if hrp and hum then
+                hum.PlatformStand = true
+                
+                local moveDir = hum.MoveVector
+                local camCF = Camera.CFrame
+                local velocity = Vector3.zero
+
+                if moveDir.Magnitude > 0 then
+                    local flyDir = (camCF.LookVector * -moveDir.Z) + (camCF.RightVector * moveDir.X)
+                    velocity = flyDir * FlySpeed
+                end
+
+                -- تحريك الشخصية مباشرة وسلس
+                hrp.AssemblyLinearVelocity = velocity
+                hrp.CFrame = CFrame.new(hrp.Position, hrp.Position + camCF.LookVector)
+            end
+        end
+    end
+end)
+
 local function ToggleFly(state)
     Flying = state
     local char = LocalPlayer.Character
-    if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if not hrp or not hum then return end
-
-    if Flying then
-        task.spawn(function()
-            hum.PlatformStand = true
-            local bv = Instance.new("BodyVelocity", hrp)
-            bv.Name = "FlyBV"
-            bv.MaxForce = Vector3.new(1e9, 1e9, 1e9)
-            bv.Velocity = Vector3.zero
-
-            local bg = Instance.new("BodyGyro", hrp)
-            bg.Name = "FlyBG"
-            bg.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
-            bg.P = 9000
-            bg.CFrame = hrp.CFrame
-
-            while Flying and ScriptActive and char and hrp and hum do
-                local moveDir = hum.MoveVector
-                local camCF = Camera.CFrame
-                
-                if moveDir.Magnitude > 0 then
-                    local flyDir = (camCF.LookVector * -moveDir.Z) + (camCF.RightVector * moveDir.X)
-                    bv.Velocity = flyDir.Unit * FlySpeed
-                else
-                    bv.Velocity = Vector3.zero
-                end
-                bg.CFrame = camCF
-                RunService.RenderStepped:Wait()
-            end
-
-            bv:Destroy()
-            bg:Destroy()
-            if hum then hum.PlatformStand = false end
-        end)
-    else
-        local bv = hrp:FindFirstChild("FlyBV")
-        local bg = hrp:FindFirstChild("FlyBG")
-        if bv then bv:Destroy() end
-        if bg then bg:Destroy() end
-        hum.PlatformStand = false
+    if char then
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if hum then hum.PlatformStand = state end
+        if hrp and not state then hrp.AssemblyLinearVelocity = Vector3.zero end
     end
 end
 
@@ -208,9 +264,7 @@ local function LoadOrionHub()
     UIStroke.Color = Color3.fromRGB(60, 60, 60)
     UIStroke.Thickness = 2
 
-    local isHidden = false
     CircleBtn.MouseButton1Click:Connect(function()
-        isHidden = not isHidden
         OrionLib:ToggleUi()
     end)
 
@@ -241,7 +295,7 @@ local function LoadOrionHub()
     MovementTab:AddSlider({
         Name = "Fly Speed",
         Min = 10,
-        Max = 500,
+        Max = 300,
         Default = 50,
         Color = Color3.fromRGB(0, 120, 215),
         Increment = 5,
@@ -249,7 +303,7 @@ local function LoadOrionHub()
         Callback = function(Value) FlySpeed = Value end
     })
 
-    -- تبويب Settings للإنهاء الكلي X
+    -- تبويب Settings للإنهاء الكلي (X)
     local SettingsTab = Window:MakeTab({ Name = "Settings", Icon = "rbxassetid://4483345998" })
 
     SettingsTab:AddButton({
@@ -260,16 +314,16 @@ local function LoadOrionHub()
             ESP_Chest_Enabled = false
             ToggleFly(false)
             
-            -- مسح التأثيرات
+            -- حذف جميع الإضافات
             for _, plr in pairs(Players:GetPlayers()) do
-                if plr.Character and plr.Character:FindFirstChild("ESP_Player_HL") then
-                    plr.Character.ESP_Player_HL:Destroy()
+                if plr.Character then
+                    if plr.Character:FindFirstChild("ESP_Player_HL") then plr.Character.ESP_Player_HL:Destroy() end
+                    local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+                    if hrp and hrp:FindFirstChild("ESP_Player_Tag") then hrp.ESP_Player_Tag:Destroy() end
                 end
             end
             for _, obj in pairs(workspace:GetDescendants()) do
-                if obj:FindFirstChild("ESP_Chest_HL") then
-                    obj.ESP_Chest_HL:Destroy()
-                end
+                if obj:FindFirstChild("ESP_Chest_HL") then obj.ESP_Chest_HL:Destroy() end
             end
             
             ToggleGui:Destroy()
