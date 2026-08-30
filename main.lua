@@ -1,5 +1,5 @@
 -- ==========================================
--- السكربت الكامل: محرك الفيزيائيات الحديث (LinearVelocity + AlignOrientation)
+-- main.lua - الكود الكامل الجاهز للرفع على GitHub
 -- ==========================================
 
 local SERVER_URL = "https://key-system-api-hjxy.onrender.com/verify-key"
@@ -9,6 +9,7 @@ local RbxAnalyticsService = game:GetService("RbxAnalyticsService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local CoreGui = game:GetService("CoreGui")
+
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
@@ -21,7 +22,7 @@ local ESP_Chest_Enabled = false
 local Flying = false
 local FlySpeed = 50
 
--- متغيرات الشخصية الديناميكية
+-- متغيرات الشخصية
 local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local Humanoid = Character:WaitForChild("Humanoid")
 local HRP = Character:WaitForChild("HumanoidRootPart")
@@ -30,7 +31,7 @@ local HRP = Character:WaitForChild("HumanoidRootPart")
 local flyAttachment, flyLinearVelocity, flyAlignOrientation, flyRenderConnection
 
 ---------------------------------------------------------
--- دالة جلب البصمة (HWID)
+-- 1. دالة جلب البصمة (HWID)
 ---------------------------------------------------------
 local function GetHWID()
     local success, hwid = pcall(function()
@@ -41,7 +42,7 @@ local function GetHWID()
 end
 
 ---------------------------------------------------------
--- دالة التحقق
+-- 2. دالة التحقق والتفعيل (ترسل Key + Username + HWID)
 ---------------------------------------------------------
 local function VerifyKey(inputKey)
     if not inputKey or inputKey == "" then return false, "الرجاء إدخال المفتاح!" end
@@ -49,6 +50,7 @@ local function VerifyKey(inputKey)
 
     local payload = HttpService:JSONEncode({
         key = string.gsub(inputKey, "^%s*(.-)%s*$", "%1"),
+        username = LocalPlayer.Name,
         hwid = GetHWID()
     })
 
@@ -74,7 +76,7 @@ local function VerifyKey(inputKey)
 end
 
 ---------------------------------------------------------
--- 1. محرك الطيران الحديث (LinearVelocity & AlignOrientation)
+-- 3. محرك الطيران الحديث (LinearVelocity & AlignOrientation)
 ---------------------------------------------------------
 local function CleanupFlyPhysics()
     if flyRenderConnection then
@@ -110,12 +112,10 @@ local function ToggleFly(state)
     Humanoid = Character:FindFirstChildOfClass("Humanoid")
     if not HRP or not Humanoid then return end
 
-    -- إنشاء Attachment جديد
     flyAttachment = Instance.new("Attachment")
     flyAttachment.Name = "FlyAttachment"
     flyAttachment.Parent = HRP
 
-    -- إنشاء LinearVelocity (بديل BodyVelocity)
     flyLinearVelocity = Instance.new("LinearVelocity")
     flyLinearVelocity.Name = "FlyLinearVelocity"
     flyLinearVelocity.Attachment0 = flyAttachment
@@ -125,7 +125,6 @@ local function ToggleFly(state)
     flyLinearVelocity.VectorVelocity = Vector3.zero
     flyLinearVelocity.Parent = HRP
 
-    -- إنشاء AlignOrientation (بديل BodyGyro)
     flyAlignOrientation = Instance.new("AlignOrientation")
     flyAlignOrientation.Name = "FlyAlignOrientation"
     flyAlignOrientation.Attachment0 = flyAttachment
@@ -135,7 +134,6 @@ local function ToggleFly(state)
     flyAlignOrientation.CFrame = Camera.CFrame
     flyAlignOrientation.Parent = HRP
 
-    -- حلقة التحديث المستمر
     flyRenderConnection = RunService.RenderStepped:Connect(function()
         if not Flying or not ScriptActive or not HRP or not HRP.Parent or not Humanoid or not Humanoid.Parent then
             ToggleFly(false)
@@ -157,7 +155,6 @@ local function ToggleFly(state)
     end)
 end
 
--- إعادة الطيران تلقائياً عند الرسبون
 LocalPlayer.CharacterAdded:Connect(function(newChar)
     Character = newChar
     Humanoid = newChar:WaitForChild("Humanoid")
@@ -170,7 +167,7 @@ LocalPlayer.CharacterAdded:Connect(function(newChar)
 end)
 
 ---------------------------------------------------------
--- 2. كاشف اللاعبين المعتمد على الأحداث (Player ESP)
+-- 4. كاشف اللاعبين والصناديق (ESP)
 ---------------------------------------------------------
 local function CreatePlayerESP(plr)
     if plr == LocalPlayer then return end
@@ -222,19 +219,10 @@ for _, plr in ipairs(Players:GetPlayers()) do
 end
 Players.PlayerAdded:Connect(CreatePlayerESP)
 
----------------------------------------------------------
--- 3. كاشف الصناديق الفوري (Chest ESP)
----------------------------------------------------------
 local function IsChest(obj)
     local name = string.lower(obj.Name)
-    if string.find(name, "chest") or string.find(name, "box") or string.find(name, "crate") 
-    or string.find(name, "treasure") or string.find(name, "loot") then
-        return true
-    end
-    if obj:FindFirstChildOfClass("ProximityPrompt") then
-        return true
-    end
-    return false
+    return string.find(name, "chest") or string.find(name, "box") or string.find(name, "crate") 
+        or string.find(name, "treasure") or string.find(name, "loot") or obj:FindFirstChildOfClass("ProximityPrompt") ~= nil
 end
 
 local function ApplyChestESP(obj)
@@ -258,24 +246,21 @@ task.spawn(function()
     end
 end)
 
-workspace.DescendantAdded:Connect(function(obj)
-    ApplyChestESP(obj)
-end)
+workspace.DescendantAdded:Connect(ApplyChestESP)
 
 ---------------------------------------------------------
--- المنيو الرئيسي وإدارة الأزرار الدائرية
+-- 5. المنيو الرئيسي وإدارة الواجهة (Orion Hub)
 ---------------------------------------------------------
 local function LoadOrionHub()
     local OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/jensonhirst/Orion/main/source')))()
 
     local Window = OrionLib:MakeWindow({
-        Name = "Lock HWID Hub (2026 Engine)",
+        Name = "Lock HWID Hub (HMAC Security)",
         HidePremium = true,
         SaveConfig = false,
         IntroText = "Loading Hub..."
     })
 
-    -- زر التصغير الدائري (|||)
     local ToggleGui = Instance.new("ScreenGui")
     ToggleGui.Name = "ToggleCircleGui"
     ToggleGui.ResetOnSpawn = false
@@ -291,9 +276,7 @@ local function LoadOrionHub()
     CircleBtn.Active = true
     CircleBtn.Draggable = true
 
-    local UICorner = Instance.new("UICorner", CircleBtn)
-    UICorner.CornerRadius = UDim.new(1, 0)
-
+    Instance.new("UICorner", CircleBtn).CornerRadius = UDim.new(1, 0)
     local UIStroke = Instance.new("UIStroke", CircleBtn)
     UIStroke.Color = Color3.fromRGB(60, 60, 60)
     UIStroke.Thickness = 2
@@ -302,7 +285,6 @@ local function LoadOrionHub()
         OrionLib:ToggleUi()
     end)
 
-    -- تبويب Visuals
     local VisualsTab = Window:MakeTab({ Name = "ESP Visuals", Icon = "rbxassetid://4483345998" })
 
     VisualsTab:AddToggle({
@@ -334,7 +316,6 @@ local function LoadOrionHub()
         end
     })
 
-    -- تبويب Movement
     local MovementTab = Window:MakeTab({ Name = "Movement", Icon = "rbxassetid://4483345998" })
 
     MovementTab:AddToggle({
@@ -358,7 +339,6 @@ local function LoadOrionHub()
         end
     })
 
-    -- تبويب Settings للإنهاء الكلي (X)
     local SettingsTab = Window:MakeTab({ Name = "Settings", Icon = "rbxassetid://4483345998" })
 
     SettingsTab:AddButton({
@@ -389,7 +369,7 @@ local function LoadOrionHub()
 end
 
 ---------------------------------------------------------
--- واجهة إدخال المفتاح (Key Verification UI)
+-- 6. واجهة التفعيل (Key UI)
 ---------------------------------------------------------
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "KeySystemUI_Container"
@@ -412,7 +392,7 @@ MainFrame.Draggable = true
 
 Title.Parent = MainFrame
 Title.Size = UDim2.new(1, 0, 0, 40)
-Title.Text = "Key System - Lock HWID"
+Title.Text = "Key System - HMAC Secure"
 Title.TextColor3 = Color3.fromRGB(255, 255, 255)
 Title.TextSize = 18
 Title.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
@@ -420,7 +400,7 @@ Title.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
 KeyInput.Parent = MainFrame
 KeyInput.Position = UDim2.new(0.1, 0, 0.3, 0)
 KeyInput.Size = UDim2.new(0.8, 0, 0, 35)
-KeyInput.PlaceholderText = "Paste Key Here..."
+KeyInput.PlaceholderText = "Enter Key Here..."
 KeyInput.Text = ""
 KeyInput.TextColor3 = Color3.fromRGB(255, 255, 255)
 KeyInput.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
@@ -452,7 +432,6 @@ VerifyBtn.MouseButton1Click:Connect(function()
             StatusText.TextColor3 = Color3.fromRGB(0, 255, 0)
             task.wait(1)
             ScreenGui:Destroy()
-            
             LoadOrionHub()
         else
             StatusText.Text = "❌ " .. msg
