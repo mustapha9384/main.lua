@@ -1,5 +1,5 @@
 -- ==========================================
--- السكربت الكامل: مفتاح التحقق + قائمة الأوامر (ESP & Fly)
+-- السكربت الرئيسي مع واجهة Orion Library الاحترافية
 -- ==========================================
 
 local SERVER_URL = "https://key-system-api-hjxy.onrender.com/verify-key"
@@ -21,9 +21,7 @@ local function GetHWID()
     local success, hwid = pcall(function()
         return RbxAnalyticsService:GetClientId()
     end)
-    if success and hwid then
-        return hwid
-    end
+    if success and hwid then return hwid end
     return tostring(LocalPlayer.UserId)
 end
 
@@ -61,40 +59,45 @@ local function VerifyKey(inputKey)
 end
 
 ---------------------------------------------------------
--- نظام المنيو الرئيسي والخصائص (Main Hub UI)
+-- المنيو الرئيسي عبر Orion Library
 ---------------------------------------------------------
-local function LoadMainHub()
-    local HubGui = Instance.new("ScreenGui")
-    HubGui.Name = "MainHubUI"
-    HubGui.Parent = CoreGui or LocalPlayer:WaitForChild("PlayerGui")
+local function LoadOrionHub()
+    local OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/jensonhirst/Orion/main/source')))()
 
-    local HubFrame = Instance.new("Frame", HubGui)
-    HubFrame.Size = UDim2.new(0, 320, 0, 380)
-    HubFrame.Position = UDim2.new(0.5, -160, 0.5, -190)
-    HubFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-    HubFrame.Active = true
-    HubFrame.Draggable = true
+    local Window = OrionLib:MakeWindow({
+        Name = "Lock HWID Hub | Cheat Menu",
+        HidePremium = true,
+        SaveConfig = false,
+        IntroText = "Loading Cheat Hub..."
+    })
 
-    local UICorner = Instance.new("UICorner", HubFrame)
-    UICorner.CornerRadius = UDim.new(0, 8)
+    -- تبويب الكشوفات (ESP)
+    local VisualsTab = Window:MakeTab({
+        Name = "Visuals (ESP)",
+        Icon = "rbxassetid://4483345998",
+        PremiumOnly = false
+    })
 
-    local Title = Instance.new("TextLabel", HubFrame)
-    Title.Size = UDim2.new(1, 0, 0, 40)
-    Title.Text = "MAIN MENU - CHEATS"
-    Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Title.TextSize = 16
-    Title.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-
-    -- متغيرات التفعيل
     local ESP_Player_Enabled = false
     local ESP_Chest_Enabled = false
-    local Flying = false
-    local FlySpeed = 50
 
-    ---------------------------------------------------------
-    -- نظام ESP (اللاعبين والصناديق)
-    ---------------------------------------------------------
-    local function UpdateESP()
+    VisualsTab:AddToggle({
+        Name = "ESP Player",
+        Default = false,
+        Callback = function(Value)
+            ESP_Player_Enabled = Value
+        end
+    })
+
+    VisualsTab:AddToggle({
+        Name = "ESP Chest",
+        Default = false,
+        Callback = function(Value)
+            ESP_Chest_Enabled = Value
+        end
+    })
+
+    RunService.RenderStepped:Connect(function()
         -- ESP Players
         for _, plr in pairs(Players:GetPlayers()) do
             if plr ~= LocalPlayer and plr.Character then
@@ -130,13 +133,17 @@ local function LoadMainHub()
                 if hl then hl:Destroy() end
             end
         end
-    end
+    end)
 
-    RunService.RenderStepped:Connect(UpdateESP)
+    -- تبويب الحركة والطيران (Movement)
+    local MovementTab = Window:MakeTab({
+        Name = "Movement",
+        Icon = "rbxassetid://4483345998",
+        PremiumOnly = false
+    })
 
-    ---------------------------------------------------------
-    -- نظام الطيران المتقدم (Fly System for Mobile & Camera)
-    ---------------------------------------------------------
+    local Flying = false
+    local FlySpeed = 50
     local BodyVelocity, BodyGyro
 
     local function ToggleFly(state)
@@ -162,8 +169,6 @@ local function LoadMainHub()
                 while Flying and char and hrp and hum do
                     local moveDir = hum.MoveVector
                     local camCF = Camera.CFrame
-                    
-                    -- تحريك الطيران بناءً على الكاميرا والجويستيك
                     local flyVector = (camCF.LookVector * -moveDir.Z) + (camCF.RightVector * moveDir.X)
                     
                     if moveDir.Magnitude > 0 then
@@ -175,7 +180,6 @@ local function LoadMainHub()
                     BodyGyro.CFrame = camCF
                     RunService.RenderStepped:Wait()
                 end
-                
                 if BodyVelocity then BodyVelocity:Destroy() end
                 if BodyGyro then BodyGyro:Destroy() end
                 hum.PlatformStand = false
@@ -187,69 +191,32 @@ local function LoadMainHub()
         end
     end
 
-    ---------------------------------------------------------
-    -- عناصر الواجهة (Buttons & Speed Slider)
-    ---------------------------------------------------------
-    local function CreateButton(text, pos, callback)
-        local btn = Instance.new("TextButton", HubFrame)
-        btn.Size = UDim2.new(0.85, 0, 0, 38)
-        btn.Position = pos
-        btn.Text = text .. " [OFF]"
-        btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        btn.TextSize = 14
-        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+    MovementTab:AddToggle({
+        Name = "Fly (Mobile & PC)",
+        Default = false,
+        Callback = function(Value)
+            ToggleFly(Value)
+        end
+    })
 
-        local enabled = false
-        btn.MouseButton1Click:Connect(function()
-            enabled = not enabled
-            btn.Text = text .. (enabled and " [ON]" or " [OFF]")
-            btn.BackgroundColor3 = enabled and Color3.fromRGB(0, 150, 70) or Color3.fromRGB(40, 40, 40)
-            callback(enabled)
-        end)
-    end
+    MovementTab:AddSlider({
+        Name = "Fly Speed",
+        Min = 10,
+        Max = 500,
+        Default = 50,
+        Color = Color3.fromRGB(0, 120, 215),
+        Increment = 5,
+        ValueName = "Speed",
+        Callback = function(Value)
+            FlySpeed = Value
+        end
+    })
 
-    CreateButton("ESP Player", UDim2.new(0.075, 0, 0.15, 0), function(st) ESP_Player_Enabled = st end)
-    CreateButton("ESP Chest", UDim2.new(0.075, 0, 0.28, 0), function(st) ESP_Chest_Enabled = st end)
-    CreateButton("Fly", UDim2.new(0.075, 0, 0.41, 0), function(st) ToggleFly(st) end)
-
-    -- عجلة / شريط التحكم بالسرعة (Speed Control)
-    local SpeedLabel = Instance.new("TextLabel", HubFrame)
-    SpeedLabel.Size = UDim2.new(0.85, 0, 0, 25)
-    SpeedLabel.Position = UDim2.new(0.075, 0, 0.58, 0)
-    SpeedLabel.Text = "Fly Speed: " .. FlySpeed
-    SpeedLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    SpeedLabel.BackgroundTransparency = 1
-
-    local SpeedBtnMinus = Instance.new("TextButton", HubFrame)
-    SpeedBtnMinus.Size = UDim2.new(0.4, 0, 0, 35)
-    SpeedBtnMinus.Position = UDim2.new(0.075, 0, 0.67, 0)
-    SpeedBtnMinus.Text = "- Speed"
-    SpeedBtnMinus.BackgroundColor3 = Color3.fromRGB(150, 40, 40)
-    SpeedBtnMinus.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Instance.new("UICorner", SpeedBtnMinus)
-
-    local SpeedBtnPlus = Instance.new("TextButton", HubFrame)
-    SpeedBtnPlus.Size = UDim2.new(0.4, 0, 0, 35)
-    SpeedBtnPlus.Position = UDim2.new(0.525, 0, 0.67, 0)
-    SpeedBtnPlus.Text = "+ Speed"
-    SpeedBtnPlus.BackgroundColor3 = Color3.fromRGB(40, 150, 40)
-    SpeedBtnPlus.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Instance.new("UICorner", SpeedBtnPlus)
-
-    SpeedBtnMinus.MouseButton1Click:Connect(function()
-        FlySpeed = math.max(10, FlySpeed - 20)
-        SpeedLabel.Text = "Fly Speed: " .. FlySpeed
-    end)
-
-    SpeedBtnPlus.MouseButton1Click:Connect(function()
-        FlySpeed = math.min(500, FlySpeed + 20)
-        SpeedLabel.Text = "Fly Speed: " .. FlySpeed
-    end)
+    OrionLib:Init()
 end
 
 ---------------------------------------------------------
--- واجهة إدخال المفتاح (Key System UI)
+-- واجهة إدخال المفتاح (Key Verification UI)
 ---------------------------------------------------------
 local ScreenGui = Instance.new("ScreenGui")
 local MainFrame = Instance.new("Frame")
@@ -259,7 +226,6 @@ local VerifyBtn = Instance.new("TextButton")
 local StatusText = Instance.new("TextLabel")
 
 ScreenGui.Parent = CoreGui or LocalPlayer:WaitForChild("PlayerGui")
-
 MainFrame.Name = "KeySystemUI"
 MainFrame.Parent = ScreenGui
 MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
@@ -311,8 +277,8 @@ VerifyBtn.MouseButton1Click:Connect(function()
             task.wait(1)
             ScreenGui:Destroy()
             
-            -- تشغيل المنيو الرئيسي بعد نجاح التفعيل
-            LoadMainHub()
+            -- فتح منيو Orion الجاهزة
+            LoadOrionHub()
         else
             StatusText.Text = "❌ " .. msg
             StatusText.TextColor3 = Color3.fromRGB(255, 50, 50)
