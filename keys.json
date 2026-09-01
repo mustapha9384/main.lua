@@ -35,5 +35,10 @@
     "hwid": "1aaa5d90bd4b89e0542953c6f12ba6c939db2a5cdb8fae0b05ebf14bc8aee4c7",
     "createdAt": "2026-09-01T17:11:55.461Z",
     "activatedAt": "2026-09-01T17:13:19.424Z"
+  },
+  {
+    "hash": "b76bfca66b7f1504d8a5891bfb77a101a4d7235bb095b4be6c7eba4794eebc0d",
+    "hwid": null,
+    "createdAt": "2026-09-01T17:46:23.569Z"
   }
 ]
